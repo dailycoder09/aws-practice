@@ -1,0 +1,17 @@
+target/
+data/
+logs/
+*.mv.db
+*.trace.db
+.idea/
+.vscode/
+*.iml
+.DS_Store
+.remember/
+.superpowers/
+.claude/
+.github/modernize/
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
