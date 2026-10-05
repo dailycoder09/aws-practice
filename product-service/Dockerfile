@@ -23,6 +23,7 @@ FROM eclipse-temurin:17-jre-alpine
 # Set working directory
 WORKDIR /app
 
+RUN mkdir -p /app/logs
 # Create non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
 
