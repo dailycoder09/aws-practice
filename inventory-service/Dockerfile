@@ -12,6 +12,7 @@ RUN mvn dependency:go-offline -B
 # Copy source code
 COPY src ./src
 
+RUN mkdir -p /app/logs
 # Build the application (skip tests for faster builds)
 RUN mvn clean package -DskipTests
 
