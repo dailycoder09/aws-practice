@@ -32,6 +32,8 @@ COPY --from=build /app/target/*.jar app.jar
 
 # Change ownership to non-root user
 RUN chown spring:spring app.jar
+# Give spring user ownership of everything under /app
+RUN chown -R spring:spring /app
 
 # Switch to non-root user
 USER spring:spring
