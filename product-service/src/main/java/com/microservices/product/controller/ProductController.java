@@ -1,6 +1,8 @@
 package com.microservices.product.controller;
 
+import com.microservices.product.dto.request.ProductImagesRequest;
 import com.microservices.product.dto.request.ProductRequest;
+import com.microservices.product.dto.response.ProductDetailResponse;
 import com.microservices.product.dto.response.ProductResponse;
 import com.microservices.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -106,7 +108,82 @@ public class ProductController {
         log.debug("REST request to get product with SKU: {}", skuCode);
         
         ProductResponse response = productService.getProductBySkuCode(skuCode);
-        
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Get full product details by ID
+     *
+     * @param id Product ID
+     * @return Product detail response with HTTP 200
+     */
+    // Digits only: a plain "/{id}/details" would also capture "/sku/details" (id = "sku"), which must
+    // stay a normal /sku/{skuCode} lookup (404 for an unknown SKU) instead of failing with a type mismatch.
+    @GetMapping("/{id:\\d+}/details")
+    @Operation(summary = "Get product details by ID",
+               description = "Retrieves the full detail page data (images, highlights, grouped specifications) of a product")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Product found",
+                    content = @Content(schema = @Schema(implementation = ProductDetailResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Product not found")
+    })
+    public ResponseEntity<ProductDetailResponse> getProductDetailsById(
+            @Parameter(description = "Product ID") @PathVariable Long id) {
+        log.debug("REST request to get product details with ID: {}", id);
+
+        ProductDetailResponse response = productService.getProductDetailsById(id);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Get full product details by SKU code
+     *
+     * @param skuCode Stock Keeping Unit code
+     * @return Product detail response with HTTP 200
+     */
+    @GetMapping("/sku/{skuCode}/details")
+    @Operation(summary = "Get product details by SKU",
+               description = "Retrieves the full detail page data (images, highlights, grouped specifications) of a product by its SKU code")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Product found",
+                    content = @Content(schema = @Schema(implementation = ProductDetailResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Product not found")
+    })
+    public ResponseEntity<ProductDetailResponse> getProductDetailsBySkuCode(
+            @Parameter(description = "SKU Code") @PathVariable String skuCode) {
+        log.debug("REST request to get product details with SKU: {}", skuCode);
+
+        ProductDetailResponse response = productService.getProductDetailsBySkuCode(skuCode);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Replace the whole image list of a product
+     *
+     * @param id Product ID
+     * @param request New image list (0-10 http/https URLs)
+     * @return Updated product detail response with HTTP 200
+     */
+    @PutMapping("/{id}/images")
+    @Operation(summary = "Replace product images",
+               description = "Replaces the whole image list of a product with the given http/https URLs "
+                       + "(0-10 items, an empty list removes all images) and updates the primary image URL")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Images replaced successfully",
+                    content = @Content(schema = @Schema(implementation = ProductDetailResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input data"),
+        @ApiResponse(responseCode = "404", description = "Product not found")
+    })
+    public ResponseEntity<ProductDetailResponse> replaceProductImages(
+            @Parameter(description = "Product ID") @PathVariable Long id,
+            @Valid @RequestBody ProductImagesRequest request) {
+        log.info("REST request to replace images of product with ID: {}", id);
+
+        ProductDetailResponse response = productService.replaceProductImages(id, request);
+
         return ResponseEntity.ok(response);
     }
 

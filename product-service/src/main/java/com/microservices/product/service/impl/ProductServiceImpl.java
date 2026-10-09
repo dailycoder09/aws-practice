@@ -1,12 +1,17 @@
 package com.microservices.product.service.impl;
 
 import com.microservices.product.client.InventoryClient;
+import com.microservices.product.dto.request.ProductImagesRequest;
 import com.microservices.product.dto.request.ProductRequest;
+import com.microservices.product.dto.response.ProductDetailResponse;
 import com.microservices.product.dto.response.ProductResponse;
 import com.microservices.product.exception.DuplicateSkuException;
 import com.microservices.product.exception.ProductNotFoundException;
 import com.microservices.product.mapper.ProductMapper;
 import com.microservices.product.model.Product;
+import com.microservices.product.model.ProductHighlight;
+import com.microservices.product.model.ProductImage;
+import com.microservices.product.model.ProductSpecification;
 import com.microservices.product.repository.ProductRepository;
 import com.microservices.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -47,15 +52,23 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ProductResponse createProduct(ProductRequest request) {
         log.info("Creating new product with SKU: {}", request.getSkuCode());
-        
+
+        validateMrp(request);
+
         // Validate SKU uniqueness
         if (productRepository.existsBySkuCode(request.getSkuCode())) {
             log.warn("Attempt to create product with duplicate SKU: {}", request.getSkuCode());
             throw new DuplicateSkuException(request.getSkuCode());
         }
 
-        // Map request to entity and save
+        // Map request to entity (scalar fields), handle the child collections explicitly, and save
         Product product = productMapper.toEntity(request);
+        if (request.getHighlights() != null) {
+            replaceHighlights(product, request.getHighlights());
+        }
+        if (request.getSpecifications() != null) {
+            replaceSpecifications(product, request.getSpecifications());
+        }
         Product savedProduct = productRepository.save(product);
         
         log.info("Successfully created product with ID: {} and SKU: {}", 
@@ -105,6 +118,80 @@ public class ProductServiceImpl implements ProductService {
     }
 
     /**
+     * Get full product details by ID
+     */
+    @Override
+    public ProductDetailResponse getProductDetailsById(Long id) {
+        log.debug("Fetching product details with ID: {}", id);
+
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> {
+                    log.error("Product not found with ID: {}", id);
+                    return new ProductNotFoundException(id);
+                });
+
+        return toDetailResponse(product);
+    }
+
+    /**
+     * Get full product details by SKU code
+     */
+    @Override
+    public ProductDetailResponse getProductDetailsBySkuCode(String skuCode) {
+        log.debug("Fetching product details with SKU: {}", skuCode);
+
+        Product product = productRepository.findBySkuCode(skuCode)
+                .orElseThrow(() -> {
+                    log.error("Product not found with SKU: {}", skuCode);
+                    return new ProductNotFoundException(skuCode);
+                });
+
+        return toDetailResponse(product);
+    }
+
+    /**
+     * Replace the whole image list of a product and update the denormalised primary image URL
+     */
+    @Override
+    @Transactional
+    public ProductDetailResponse replaceProductImages(Long id, ProductImagesRequest request) {
+        log.info("Replacing images of product with ID: {}", id);
+
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> {
+                    log.error("Cannot replace images - Product not found with ID: {}", id);
+                    return new ProductNotFoundException(id);
+                });
+
+        List<ProductImagesRequest.Image> newImages = request.getImages();
+        if (newImages == null) {
+            throw new IllegalArgumentException("Images are required (use an empty list to remove all images)");
+        }
+
+        // Delete the old rows first: images are unique per (product_id, sort_order) and Hibernate
+        // flushes inserts before orphan deletes, so re-inserting position 1..n in the same flush
+        // would violate the unique constraint.
+        product.getImages().clear();
+        productRepository.flush();
+
+        int position = 1;
+        for (ProductImagesRequest.Image image : newImages) {
+            product.getImages().add(ProductImage.builder()
+                    .product(product)
+                    .url(image.getUrl())
+                    .alt(image.getAlt())
+                    .sortOrder(position++)
+                    .build());
+        }
+        product.setImageUrl(newImages.isEmpty() ? null : newImages.get(0).getUrl());
+
+        Product savedProduct = productRepository.save(product);
+
+        log.info("Product {} now has {} image(s)", id, newImages.size());
+        return toDetailResponse(savedProduct);
+    }
+
+    /**
      * Get all products with pagination
      */
     @Override
@@ -142,7 +229,9 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ProductResponse updateProduct(Long id, ProductRequest request) {
         log.info("Updating product with ID: {}", id);
-        
+
+        validateMrp(request);
+
         // Find existing product
         Product existingProduct = productRepository.findById(id)
                 .orElseThrow(() -> {
@@ -161,8 +250,15 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
-        // Update entity and save
+        // Update scalar fields (null = unchanged), then the child collections explicitly:
+        // null = leave unchanged, a provided list replaces the stored one, an empty list clears it
         productMapper.updateEntityFromRequest(request, existingProduct);
+        if (request.getHighlights() != null) {
+            replaceHighlights(existingProduct, request.getHighlights());
+        }
+        if (request.getSpecifications() != null) {
+            replaceSpecifications(existingProduct, request.getSpecifications());
+        }
         Product updatedProduct = productRepository.save(existingProduct);
         
         log.info("Successfully updated product with ID: {}", id);
@@ -308,7 +404,61 @@ public class ProductServiceImpl implements ProductService {
         boolean exists = productRepository.existsBySkuCode(skuCode);
         
         log.debug("Product with SKU '{}' exists: {}", skuCode, exists);
-        
+
         return exists;
+    }
+
+    /**
+     * Cross-field rule: when both mrp and price are supplied, mrp must not be lower than the price
+     */
+    private void validateMrp(ProductRequest request) {
+        if (request.getMrp() != null && request.getPrice() != null
+                && request.getMrp().compareTo(request.getPrice()) < 0) {
+            log.warn("Rejected request for SKU {}: MRP {} is lower than price {}",
+                     request.getSkuCode(), request.getMrp(), request.getPrice());
+            throw new IllegalArgumentException("MRP cannot be lower than the price");
+        }
+    }
+
+    /**
+     * Replace the highlight rows of a product in place (the list instance must be kept for orphanRemoval)
+     */
+    private void replaceHighlights(Product product, List<String> texts) {
+        product.getHighlights().clear();
+        int position = 1;
+        for (String text : texts) {
+            product.getHighlights().add(ProductHighlight.builder()
+                    .product(product)
+                    .text(text)
+                    .sortOrder(position++)
+                    .build());
+        }
+    }
+
+    /**
+     * Replace the specification rows of a product in place (the list instance must be kept for orphanRemoval)
+     */
+    private void replaceSpecifications(Product product, List<ProductRequest.Specification> specifications) {
+        product.getSpecifications().clear();
+        int position = 1;
+        for (ProductRequest.Specification specification : specifications) {
+            product.getSpecifications().add(ProductSpecification.builder()
+                    .product(product)
+                    .groupName(specification.getGroup())
+                    .specKey(specification.getKey())
+                    .specValue(specification.getValue())
+                    .sortOrder(position++)
+                    .build());
+        }
+    }
+
+    /**
+     * Map a product to its detail response and fill stockQuantity from inventory-service
+     * (fail-open: null when inventory-service has no record or is unavailable)
+     */
+    private ProductDetailResponse toDetailResponse(Product product) {
+        ProductDetailResponse response = productMapper.toDetailResponse(product);
+        response.setStockQuantity(inventoryClient.findStockBySkuCode(product.getSkuCode()).orElse(null));
+        return response;
     }
 }

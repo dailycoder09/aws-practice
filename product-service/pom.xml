@@ -42,13 +42,6 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!-- What spring-boot-starter-thymeleaf wraps; declared directly because the starter's own pom
-             couldn't be downloaded from Maven Central on this machine. Boot auto-configures Thymeleaf either way. -->
-        <dependency>
-            <groupId>org.thymeleaf</groupId>
-            <artifactId>thymeleaf-spring6</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>

@@ -1,23 +1,41 @@
 # Multi-stage Docker build for Inventory Service
 # Stage 1: Build stage
-FROM maven:3.9.6-eclipse-temurin-17 AS build
+FROM docker.io/library/maven:3.9.6-eclipse-temurin-17 AS build
 
 # Set working directory
 WORKDIR /app
 
+# Behind a company proxy (HTTPS_PROXY set) Maven needs a proxy setting, because it ignores that variable.
+# Each Maven step below writes the setting fresh, or removes it when no proxy is set, so a cached layer
+# can never carry a stale proxy into a build made on a different network (CI and AWS have no proxy).
+
 # Copy pom.xml and download dependencies (cached layer)
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN if [ -n "$HTTPS_PROXY" ]; then \
+      hp="${HTTPS_PROXY#*://}"; hp="${hp%%/*}"; host="${hp%%:*}"; port="${hp##*:}"; \
+      mkdir -p /root/.m2; \
+      printf '<settings><proxies><proxy><id>https</id><active>true</active><protocol>https</protocol><host>%s</host><port>%s</port></proxy><proxy><id>http</id><active>true</active><protocol>http</protocol><host>%s</host><port>%s</port></proxy></proxies></settings>' "$host" "$port" "$host" "$port" > /root/.m2/settings.xml; \
+    else \
+      rm -f /root/.m2/settings.xml; \
+    fi \
+    && mvn dependency:go-offline -B
 
 # Copy source code
 COPY src ./src
 
 RUN mkdir -p /app/logs
 # Build the application (skip tests for faster builds)
-RUN mvn clean package -DskipTests
+RUN if [ -n "$HTTPS_PROXY" ]; then \
+      hp="${HTTPS_PROXY#*://}"; hp="${hp%%/*}"; host="${hp%%:*}"; port="${hp##*:}"; \
+      mkdir -p /root/.m2; \
+      printf '<settings><proxies><proxy><id>https</id><active>true</active><protocol>https</protocol><host>%s</host><port>%s</port></proxy><proxy><id>http</id><active>true</active><protocol>http</protocol><host>%s</host><port>%s</port></proxy></proxies></settings>' "$host" "$port" "$host" "$port" > /root/.m2/settings.xml; \
+    else \
+      rm -f /root/.m2/settings.xml; \
+    fi \
+    && mvn clean package -DskipTests
 
 # Stage 2: Runtime stage
-FROM eclipse-temurin:17-jre-alpine
+FROM docker.io/library/eclipse-temurin:17-jre-alpine
 
 # Set working directory
 WORKDIR /app
@@ -30,8 +48,6 @@ COPY --from=build /app/target/*.jar app.jar
 
 # Give spring user ownership of everything under /app
 RUN chown -R spring:spring /app
-
-
 
 # Switch to non-root user
 USER spring:spring

@@ -6,7 +6,7 @@ import lombok.Value;
 import java.util.List;
 
 /**
- * Details about the server answering a request, shown on the home page.
+ * Details about the server answering a request, returned by GET /api/products/server-info.
  * {@code cloud} is null when the app is not running on AWS EC2.
  */
 @Value

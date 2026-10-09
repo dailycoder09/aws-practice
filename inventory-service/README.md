@@ -189,6 +189,7 @@ http://localhost:8082/api-docs
 | PATCH | `/api/inventory/sku/{skuCode}/adjust?delta=-5` | Increment/decrement stock (400 if result would go negative) |
 | DELETE | `/api/inventory/{id}` | Delete an inventory record |
 | GET | `/api/inventory/sku/{skuCode}/audit` | Paginated audit history for a SKU, most recent first |
+| GET | `/api/inventory/server-info` | Which server answered this request (see "Server info endpoint" below) |
 
 ### Example Requests
 
@@ -216,6 +217,34 @@ curl -X PATCH "http://localhost:8082/api/inventory/sku/APPLE-IP15P-128/adjust?de
 ```bash
 curl "http://localhost:8082/api/inventory/sku/APPLE-IP15P-128/audit?page=0&size=10"
 ```
+
+### Server info endpoint
+
+`GET /api/inventory/server-info` reports which server instance answered the request, so a dashboard can show (per service) the answering host, IP, and EC2 instance. It lives under `/api/inventory/` so the load balancer's `/api/inventory*` rule routes it here. The response is never cached (`Cache-Control: no-store`), since behind a load balancer each call can land on a different instance.
+
+```bash
+curl http://localhost:8082/api/inventory/server-info
+```
+
+The JSON has these sections:
+
+| Section | Contents |
+|---|---|
+| `application` | name, version, active profiles, port |
+| `host` | hostname, IPv4 addresses (per network interface), container flag (running in Docker) |
+| `request` | `Host` header, serving address/port, client address, `X-Forwarded-For` |
+| `runtime` | Java/OS details, CPU count, heap usage, pid, start time, uptime |
+| `cloud` | EC2 instance details (instance id/type, AZ, region, private/public IP, AMI); **only present on EC2** |
+
+EC2 details come from the instance metadata service (IMDSv2) with a 500 ms timeout, so off-AWS the lookup fails fast and the `cloud` section is simply omitted. The result is cached for 5 minutes. Only a fixed list of harmless fields is read - never IAM credentials.
+
+| Config property | Env var | Default |
+|---|---|---|
+| `server-info.cloud-metadata.enabled` | `CLOUD_METADATA_ENABLED` | `true` (set `false` to skip the lookup entirely) |
+| `server-info.cloud-metadata.url` | `CLOUD_METADATA_URL` | `http://169.254.169.254` |
+| `server-info.cloud-metadata.timeout-ms` | - | `500` |
+
+When the service runs in a container on EC2, the instance's metadata hop limit must be set to 2 (`aws ec2 modify-instance-metadata-options --instance-id <id> --http-put-response-hop-limit 2`); with the default of 1, IMDSv2 token responses don't reach the container and `cloud` will be missing.
 
 ## Seed Data
 

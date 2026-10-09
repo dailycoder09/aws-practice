@@ -32,7 +32,7 @@ import java.util.List;
 
 /**
  * Collects details about the server answering a request (host, network, JVM, app, and AWS EC2 when available)
- * for the home page.
+ * for the server info endpoint.
  */
 @Service
 @RequiredArgsConstructor

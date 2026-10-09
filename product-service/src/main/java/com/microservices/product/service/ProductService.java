@@ -1,6 +1,8 @@
 package com.microservices.product.service;
 
+import com.microservices.product.dto.request.ProductImagesRequest;
 import com.microservices.product.dto.request.ProductRequest;
+import com.microservices.product.dto.response.ProductDetailResponse;
 import com.microservices.product.dto.response.ProductResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +27,7 @@ public interface ProductService {
      * @param request Product creation request
      * @return Created product response
      * @throws com.microservices.product.exception.DuplicateSkuException if SKU already exists
+     * @throws IllegalArgumentException if mrp is lower than the price
      */
     ProductResponse createProduct(ProductRequest request);
 
@@ -45,6 +48,37 @@ public interface ProductService {
      * @throws com.microservices.product.exception.ProductNotFoundException if product not found
      */
     ProductResponse getProductBySkuCode(String skuCode);
+
+    /**
+     * Get full product details (images, highlights, grouped specifications) by ID.
+     * stockQuantity is looked up from inventory-service and is null when unavailable.
+     *
+     * @param id Product ID
+     * @return Product detail response
+     * @throws com.microservices.product.exception.ProductNotFoundException if product not found
+     */
+    ProductDetailResponse getProductDetailsById(Long id);
+
+    /**
+     * Get full product details (images, highlights, grouped specifications) by SKU code.
+     * stockQuantity is looked up from inventory-service and is null when unavailable.
+     *
+     * @param skuCode Stock Keeping Unit code
+     * @return Product detail response
+     * @throws com.microservices.product.exception.ProductNotFoundException if product not found
+     */
+    ProductDetailResponse getProductDetailsBySkuCode(String skuCode);
+
+    /**
+     * Replace the whole image list of a product (0-10 images; empty removes all) and update
+     * the denormalised primary image URL (first image, or null)
+     *
+     * @param id Product ID
+     * @param request New image list
+     * @return Updated product detail response
+     * @throws com.microservices.product.exception.ProductNotFoundException if product not found
+     */
+    ProductDetailResponse replaceProductImages(Long id, ProductImagesRequest request);
 
     /**
      * Get all products with pagination
@@ -69,6 +103,7 @@ public interface ProductService {
      * @return Updated product response
      * @throws com.microservices.product.exception.ProductNotFoundException if product not found
      * @throws com.microservices.product.exception.DuplicateSkuException if new SKU already exists
+     * @throws IllegalArgumentException if mrp is lower than the price
      */
     ProductResponse updateProduct(Long id, ProductRequest request);
 

@@ -141,6 +141,13 @@ inventory:
   product-service:
     url: ${PRODUCT_SERVICE_URL:http://localhost:8081}
 
+# Server details endpoint: AWS EC2 instance metadata lookup (IMDSv2). Fails fast and quietly off-AWS.
+server-info:
+  cloud-metadata:
+    enabled: ${CLOUD_METADATA_ENABLED:true}
+    url: ${CLOUD_METADATA_URL:http://169.254.169.254}
+    timeout-ms: 500
+
 ---
 # Development Profile
 spring:

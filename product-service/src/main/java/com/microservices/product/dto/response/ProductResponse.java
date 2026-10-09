@@ -56,6 +56,26 @@ public class ProductResponse {
     private String skuCode;
 
     /**
+     * Brand name (nullable)
+     */
+    private String brand;
+
+    /**
+     * Maximum retail price (nullable)
+     */
+    private BigDecimal mrp;
+
+    /**
+     * Derived round((mrp - price) / mrp * 100); null when mrp is null or not above price
+     */
+    private Integer discountPercent;
+
+    /**
+     * Primary image URL (nullable); the full image list is only on the detail endpoints
+     */
+    private String imageUrl;
+
+    /**
      * Creation timestamp
      */
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")

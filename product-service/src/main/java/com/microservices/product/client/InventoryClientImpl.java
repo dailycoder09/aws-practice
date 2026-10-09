@@ -3,14 +3,11 @@ package com.microservices.product.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -59,42 +56,6 @@ public class InventoryClientImpl implements InventoryClient {
         } catch (Exception ex) {
             log.warn("Unexpected error during inventory lookup for SKU: {} - {}", skuCode, ex.getMessage());
             return Optional.empty();
-        }
-    }
-
-    /**
-     * Find current stock quantities for several SKU codes using inventory-service's batch endpoint
-     *
-     * @param skuCodes SKU codes to look up
-     * @return Map of skuCode to quantity on hand, or an empty map if the list is empty or the
-     *         lookup fails for any reason - never throws
-     */
-    @Override
-    public Map<String, Integer> findStockForSkus(List<String> skuCodes) {
-        if (skuCodes.isEmpty()) {
-            return Map.of();
-        }
-
-        String joinedSkuCodes = String.join(",", skuCodes);
-
-        // Same intentional asymmetry as findStockBySkuCode: every failure is swallowed into an empty map
-        try {
-            Map<String, Integer> stock = inventoryRestClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/api/inventory/batch")
-                            .queryParam("skuCodes", joinedSkuCodes)
-                            .build())
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<Map<String, Integer>>() {
-                    });
-
-            return stock != null ? stock : Map.of();
-        } catch (RestClientException ex) {
-            log.warn("Batch inventory lookup failed for {} SKUs - {}", skuCodes.size(), ex.getMessage());
-            return Map.of();
-        } catch (Exception ex) {
-            log.warn("Unexpected error during batch inventory lookup for {} SKUs - {}", skuCodes.size(), ex.getMessage());
-            return Map.of();
         }
     }
 
